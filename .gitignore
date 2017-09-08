@@ -2,3 +2,4 @@ oc-cluster-completion
 mounts.json
 mounts-template.json
 .vscode
+oc-cluster.bash
