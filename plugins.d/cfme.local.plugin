@@ -110,10 +110,12 @@ EOF
 }
 
 function cfme.register {
- local __cloudforms_url=$(oc get route cloudforms -o jsonpath='https://{.spec.host}')
+ local __cloudforms_url
+ __cloudforms_url=$(oc get route cloudforms -o jsonpath='https://{.spec.host}')=$(oc get route cloudforms -o jsonpath='https://{.spec.host}')
 
  # Register the cluster
- local __token=$(oc sa get-token management-admin -n management-infra --as=system:admin)
+ local __token=
+ __token=$(oc sa get-token management-admin -n management-infra --as=system:admin)
 
  curl -s --insecure --user admin:smartvm -X POST -H "Accept: application/json" -o /dev/null -d \
  '{
