@@ -2,8 +2,6 @@
 
 local __retry_interval=60
 local __max_retries=20
-local _CFMENS="cfme"
-local _MI_NS="management-infra"
 
 function cfme.describe {
    echo "Instance a cloudforms on a new project"
@@ -14,27 +12,25 @@ function cfme.help {
 }
 
 function cfme.install {
-  requiresInternet
-
 
    # TODO: Check if required ServiceAccount and permisions are granted. If not, call metrics-infra.install
    metrics-infra.install
 
-   ${OC_BINARY} adm new-project $_CFMENS --description='Cloudforms Project' --display-name='cloudforms'
-   ${OC_BINARY} adm policy add-scc-to-user privileged -z defaul -n $_CFMENS --as=system:admin
+   oc new-project cfme --description='Cloudforms Project' --display-name='cloudforms'
+   oc adm policy add-scc-to-user privileged system:serviceaccount:cfme:default --as=system:admin
 
    #create-volume cfme-pgdb-volume
    #create-volume cfme-app-volume
 
-   ${OC_BINARY} create -f https://raw.githubusercontent.com/openshift/openshift-ansible/master/roles/openshift_examples/files/examples/v1.4/cfme-templates/cfme-template.yaml -n openshift --as=system:admin
-   echo "Cloudforms template installed in the openshift project"
-   ${OC_BINARY} new-app --template=cloudforms -n $_CFMENS --as=system:admin
 
-   __cloudforms_url=$(${OC_BINARY} get route cloudforms -o jsonpath='https://{.spec.host}' -n $_CFMENS --as=system:admin)
+   oc create -f https://raw.githubusercontent.com/openshift/openshift-ansible/master/roles/openshift_examples/files/examples/v1.4/cfme-templates/cfme-template.yaml -n openshift --as=system:admin
+   oc new-app --template=cloudforms -n cfme
+
+   __cloudforms_url=$(oc get route cloudforms -o jsonpath='https://{.spec.host}')
 
    for __dc in postgresql memcached cloudforms
-   do
-     ${OC_BINARY} set triggers dc/${__dc} --auto -n $_CFMENS --as=system:admin
+   do 
+     oc set triggers dc/${__dc} --auto
    done
 
    # Testint if CF is alive:
@@ -42,7 +38,7 @@ function cfme.install {
    for ((i=1; i<${__max_retries}; i++))
    do
      echo -n $i "..."
-     curl -s --insecure -u admin:smartvm ${__cloudforms_url}/api | json_reformat | grep version | grep -oP "2\.\d{1}\.\d{1}" && break
+     curl -s --insecure -u admin:smartvm ${__cloudforms_url}/api |json_reformat |grep version |grep -oP "2\.\d{1}\.\d{1}" && break
      sleep ${__retry_interval};
    done
 
@@ -56,9 +52,10 @@ function cfme.install {
 }
 
 function metrics-infra.install {
-${OC_BINARY} adm new-project -n $_MI_NS --description="Management Infrastructure" --as=system:admin
 
-${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
+oc new-project management-infra --description="Management Infrastructure" --as=system:admin
+
+oc create -n management-infra --as=system:admin -f - << EOF
   apiVersion: v1
   kind: ClusterRole
   metadata:
@@ -70,7 +67,7 @@ ${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
     - '*'
 EOF
 
-${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
+oc create -n management-infra --as=system:admin -f - << EOF
   apiVersion: v1
   kind: ClusterRole
   metadata:
@@ -85,39 +82,40 @@ ${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
     - '*'
 EOF
 
-${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
+oc create -n management-infra --as=system:admin -f - << EOF
   apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: management-admin
 EOF
 
-${OC_BINARY} create -n $_MI_NS --as=system:admin -f - << EOF
+oc create -n management-infra --as=system:admin -f - << EOF
   apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: inspector-admin
 EOF
 
-${OC_BINARY} adm policy add-role-to-user admin -z management-admin -n $_MI_NS --as=system:admin
-${OC_BINARY} adm policy add-role-to-user management-infra-admin -z management-admin  -n $_MI_NS --as=system:admin
-${OC_BINARY} adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:$_MI_NS:management-admin --as=system:admin
-${OC_BINARY} adm policy add-scc-to-user privileged -z management-admin -n $_MI_NS --as=system:admin
-${OC_BINARY} adm policy add-cluster-role-to-user system:image-puller system:serviceaccount:$_MI_NS:inspector-admin --as=system:admin
-${OC_BINARY} adm policy add-scc-to-user privileged -z inspector-admin -n $_MI_NS --as=system:admin
-${OC_BINARY} adm policy add-cluster-role-to-user self-provisioner system:serviceaccount:$_MI_NS:management-admin --as=system:admin
-${OC_BINARY} adm policy add-cluster-role-to-user hawkular-metrics-admin system:serviceaccount:$_MI_NS:management-admin --as=system:admin
-${OC_BINARY} adm policy add-cluster-role-to-user system:image-auditor system:serviceaccount:$_MI_NS:management-admin --as=system:admin
+oc adm policy add-role-to-user -n management-infra admin -z management-admin --as=system:admin
+oc adm policy add-role-to-user -n management-infra management-infra-admin -z management-admin --as=system:admin
+oc adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:management-infra:management-admin --as=system:admin
+oc adm policy add-scc-to-user privileged system:serviceaccount:management-infra:management-admin --as=system:admin
+oc adm policy add-cluster-role-to-user system:image-puller system:serviceaccount:management-infra:inspector-admin --as=system:admin
+oc adm policy add-scc-to-user privileged system:serviceaccount:management-infra:inspector-admin --as=system:admin
+oc adm policy add-cluster-role-to-user self-provisioner system:serviceaccount:management-infra:management-admin --as=system:admin
+oc adm policy add-cluster-role-to-user hawkular-metrics-admin system:serviceaccount:management-infra:management-admin --as=system:admin
+oc adm policy add-cluster-role-to-user system:image-auditor system:serviceaccount:management-infra:management-admin --as=system:admin
+
 }
 
 function cfme.register {
-  local __cloudforms_url=$(${OC_BINARY} get route cloudforms -o jsonpath='https://{.spec.host}' -n $_CFMENS --as=system:admin)
+  local __cloudforms_url=$(oc get route cloudforms -o jsonpath='https://{.spec.host}')
 
   # Register the cluster
-  local __token=$(${OC_BINARY} sa get-token management-admin -n $_MI_NS --as=system:admin)
+  local __token=$(oc sa get-token management-admin -n management-infra --as=system:admin)
 
   curl -s --insecure --user admin:smartvm -X POST -H "Accept: application/json" -o /dev/null -d \
-'{
+'{  
   "type": "ManageIQ::Providers::OpenshiftEnterprise::ContainerManager",
   "name": "OCP",
   "connection_configurations": [
@@ -144,20 +142,21 @@ function cfme.register {
      }
    }]
 }' \
-${__cloudforms_url}/api/providers
+${__cloudforms_url}/api/providers 
 }
 
 function management-infra.uninstall {
-   ${OC_BINARY} delete project $_MI_NS --as=system:admin
+   oc delete project management-infra --as=system:admin
 }
 
 function cfme.uninstall {
    echo "Uninstalling Cloudforms"
-   #${OC_BINARY} delete pv cfme-pgdb-volume --as=system:admin
-   #${OC_BINARY} delete pv cfme-app-volume --as=system:admin
+   #oc delete pv cfme-pgdb-volume --as=system:admin
+   #oc delete pv cfme-app-volume --as=system:admin
 
    management-infra.uninstall
-   ${OC_BINARY} delete project $_CFMENS --as=system:admin
+   oc delete project cfme
 }
 
 cfme.describe
+
