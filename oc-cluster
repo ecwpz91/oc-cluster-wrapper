@@ -30,7 +30,7 @@ function which-ip {
     if [ -e /sbin/ip ];
     then
       /sbin/ip a show dev docker0  | grep "inet " | awk -F: '{print $1}' | awk '{print $2}' | cut -d "/" -f 1;
-    else  
+    else
       /sbin/ifconfig docker0 | grep "inet " | awk -F: '{print $1}' | awk '{print $2}'
     fi
   elif [[ "$__PLATFORM" == "macosx" ]]; then
@@ -365,7 +365,7 @@ function up {
           else
             __PARM_OC_LOGGING="true"
             shift; # past argument
-          fi  
+          fi
           ;;
         --metrics=*)
           [ ! -z "$__PARM_OC_METRICS" ] && echo "Parameter ${_key%=*} has already been set. Remove the duplicate occurence" && exit 1
@@ -381,7 +381,7 @@ function up {
           else
             __PARM_OC_METRICS="true"
             shift; # past argument
-          fi  
+          fi
           ;;
         --service-catalog=*)
           [ ! -z "$__PARM_OC_SERVICECATALOG" ] && echo "Parameter ${_key%=*} has already been set. Remove the duplicate occurence" && exit 1
@@ -461,7 +461,7 @@ function up {
           [ ! -z "$__PARM_OC_ROUTING_SUFFIX" ] && echo "Parameter $_key has already been set. Remove the duplicate occurence" && exit 1
           __PARM_OC_ROUTING_SUFFIX="$2"
           shift 2; # past argument
-          ;; 
+          ;;
         --env|-e)
           __PARM_OC_ENV+=("$2")
           shift 2; # past argument
@@ -474,7 +474,7 @@ function up {
           echo "Parameter $_key not supported. Remove it to use this tool"
           exit 1
           ;;
-        *)  
+        *)
           echo "Parameter $_key not supported. It will not be used"
           shift
           ;;
@@ -521,6 +521,17 @@ function up {
     if supports pv; then
       CMDLINE+=" --host-pv-dir $OPENSHIFT_HOST_PV_DIR"
     fi
+
+    if [ ! -z $__PARM_OC_HTTP_PROXY ]; then
+      CMDLINE+=" --http-proxy=$__PARM_OC_HTTP_PROXY"
+    fi
+    if [ ! -z $__PARM_OC_HTTPS_PROXY ]; then
+      CMDLINE+=" --https-proxy=$__PARM_OC_HTTPS_PROXY"
+    fi
+    if [ ! -z $__PARM_OC_NO_PROXY ]; then
+      CMDLINE+=" --no-proxy=$__PARM_OC_NO_PROXY"
+    fi
+
     CMDLINE+=" --use-existing-config"
     CMDLINE+=" -e TZ=$OC_CLUSTER_TZ"
     for ENV_PARM in "${__PARM_OC_ENV[@]}" ; do
@@ -530,7 +541,7 @@ function up {
     mkdir -p ${OPENSHIFT_HOST_MASTER_DIR}
     cp -pf ${OPENSHIFT_CERTS_DIR}/*.{crt,key,txt} ${OPENSHIFT_HOST_MASTER_DIR}
     echo "[INFO] Shared certificates copied into the cluster"
-    
+
     # TODO: If --server_log-level=0
     # TODO: Once all the command line has been processed and swallow. Don't pass additional
     # args to the CMDLINE
@@ -622,7 +633,7 @@ function up {
     status &> /dev/null || error_exit "[ERROR] Cluster has not started correctly. Profile configuration will be preserved"
     # Create the profile markfile
     echo "${_profile}" > $OPENSHIFT_HOME_DIR/active_profile
-    
+
     # Fix permissions in linux
     if [[ "$__PLATFORM" == "linux" ]]; then
       docker exec origin chown -R $USER:$GROUP $(internalProfileDir)
@@ -755,7 +766,7 @@ function destroy {
         echo "Removing $OPENSHIFT_PROFILES_DIR/$_profile"
         # To avoid permission error in linux, we remove the profile using the openshift container
         # TODO: We should use the __VERSION used to create the container, and not the one of the client
-        #       as if we update the client, don't create a new cluster but destroy an old one, 
+        #       as if we update the client, don't create a new cluster but destroy an old one,
         #       it will pull down the __VERSION image
 
 # I see when I remove a profile with SELinux that in ~/.oc/profiles/<profile> there is two different selinux labels
@@ -795,8 +806,8 @@ function list {
 
   echo "Profiles:"
   if [[ -d "$OPENSHIFT_PROFILES_DIR/" ]]
-  then 
-    for i in `ls $OPENSHIFT_PROFILES_DIR`
+  then
+    for i in `ls -tr $OPENSHIFT_PROFILES_DIR`
     do
       echo "- $i"
     done
@@ -893,12 +904,16 @@ _oc_cluster_completion() {
   local cur prev command commands profiles cluster_args
   COMPREPLY=()   # Array variable storing the possible completions.
   # TODO: Add "-h --help"
+  OPENSHIFT_HOME_DIR="\${OPENSHIFT_HOME:-\$HOME/.oc}"
+  OPENSHIFT_PROFILES_DIR="\${OPENSHIFT_PROFILES_DIR:-\$OPENSHIFT_HOME_DIR/profiles}"
   cur=\${COMP_WORDS[COMP_CWORD]}
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
   command="\${COMP_WORDS[1]}"
   commands="up down destroy list status show ssh console plugin-list plugin-install plugin-uninstall -h --help"
 
-  profiles=\$(ls -d $OPENSHIFT_PROFILES_DIR/*/ | xargs -L1 basename)
+  # profiles=\$(ls -d $OPENSHIFT_PROFILES_DIR/*/ | xargs -L1 basename)
+  ls -d "\$OPENSHIFT_PROFILES_DIR"/*/ >/dev/null 2>&1 \
+  && profiles=\$(ls -d "\$OPENSHIFT_PROFILES_DIR"/*/ | xargs -L1 basename) || profiles=''
 
   boolean_args="--create-machine= --forward-ports= --metrics= --skip-registry-check= --use-existing-config="
   cluster_args="--docker-machine= -e --env= --host-config-dir= --host-data-dir= --host-volumes-dir= --image= --public-hostname= --routing-suffix= --server-loglevel= --version= --type=\$boolean_args"
@@ -1050,7 +1065,7 @@ function help {
   echo "  oc-cluster destroy [profile]"
   echo "  oc-cluster list"
   echo "  oc-cluster status"
-  echo "  oc-cluster show"
+  echo "  oc-cluster show [profile]"
   echo "  oc-cluster ssh"
   echo "  oc-cluster console"
   echo "  oc-cluster completion bash"
@@ -1147,7 +1162,8 @@ then
         ;;
       *)
         shift # past argument
-        $key "$@"  2> /dev/null || echo "Command $key not found"
+        # $key "$@"  2> /dev/null || echo "Command $key not found"
+        $key "$@"
         ;;
    esac
 else
